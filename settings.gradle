@@ -1,0 +1,2 @@
+include ':billing'
+rootProject.name = "BillingHelper"
