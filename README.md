@@ -52,7 +52,7 @@ billingHelper.purchase(sku = arrayOf("productId_here"), type = BillingClient.Sku
 
 ```kotlin
 billingHelper.purchase(sku = arrayOf("productId_here"), type = BillingClient.SkuType.SUBS) { purchase ->
-    BillingSecurity.verifyPurchase(PUBLIC_BASE64_RSA_KEY_FROM_DEVELOPER_CONSOLE, purchase.originalJson, purchase.signature)
+    BillingSecurity.verifyPurchase(PUBLIC_BASE64_RSA_KEY, purchase.originalJson, purchase.signature)
 }
 ```
 
