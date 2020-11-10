@@ -1,6 +1,7 @@
 name: Ktlint
 
 on:
+  pull_request:
   push:
     paths-ignore:
       - 'README.md'
