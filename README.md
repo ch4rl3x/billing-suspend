@@ -5,6 +5,8 @@ It also includes a client-side token validation, if there is not server availabl
 <a href="https://github.com/Ch4rl3x/BillingHelper/actions?query=workflow%3ALint"><img src="https://github.com/Ch4rl3x/BillingHelper/workflows/Lint/badge.svg" alt="Lint"></a>
 <a href="https://github.com/Ch4rl3x/BillingHelper/actions?query=workflow%3AKtlint"><img src="https://github.com/Ch4rl3x/BillingHelper/workflows/Ktlint/badge.svg" alt="Ktlint"></a>
 
+<a href="https://www.codefactor.io/repository/github/ch4rl3x/billinghelper"><img src="https://www.codefactor.io/repository/github/ch4rl3x/billinghelper/badge" alt="CodeFactor" /></a>
+
 [![](https://jitpack.io/v/Ch4rl3x/BillingHelper.svg)](https://jitpack.io/#Ch4rl3x/BillingHelper)
 
 ## Dependency
