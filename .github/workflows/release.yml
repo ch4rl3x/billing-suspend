@@ -1,11 +1,11 @@
-name: Publish package to GitHub Packages
+name: Release new version
 on:
   push:
     tags:
       - '*'
 
 jobs:
-  publish:
+  release:
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
