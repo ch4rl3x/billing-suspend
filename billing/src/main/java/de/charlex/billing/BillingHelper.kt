@@ -73,7 +73,7 @@ class BillingHelper(private val activity: Activity, billingClientBuilder: Billin
      *
      * Call this method once you are done with this BillingClient reference.
      */
-    private suspend fun endConnection() = withContext(Dispatchers.Main) {
+    suspend fun endConnection() = withContext(Dispatchers.Main) {
         Log.d("BillingHelper", "The billing client is still ready")
         billingClient.endConnection()
     }
@@ -234,7 +234,7 @@ class BillingHelper(private val activity: Activity, billingClientBuilder: Billin
         val purchasesUpdatedBundle = querySkuDetails(params, validation)
 
         purchasesUpdatedBundle?.let {
-            Log.d("BillingHelper", translateBillingResponseCodeToLogString(purchasesUpdatedBundle.billingResult?.responseCode))
+            Log.d("BillingHelper", translateBillingResponseCodeToLogString(purchasesUpdatedBundle.billingResult.responseCode))
         }
         if (!purchasesUpdatedBundle?.billingResult?.debugMessage.isNullOrBlank()) {
             Log.d("BillingHelper", "DebugMessage: ${purchasesUpdatedBundle?.billingResult?.debugMessage}")
