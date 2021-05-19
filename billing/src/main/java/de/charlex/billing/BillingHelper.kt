@@ -9,14 +9,16 @@ import com.android.billingclient.api.BillingFlowParams
 import com.android.billingclient.api.BillingResult
 import com.android.billingclient.api.ConsumeParams
 import com.android.billingclient.api.Purchase
+import com.android.billingclient.api.PurchasesResult
 import com.android.billingclient.api.PurchasesUpdatedListener
 import com.android.billingclient.api.SkuDetailsParams
 import com.android.billingclient.api.querySkuDetails
+
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlin.coroutines.Continuation
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 
 /**
  * Helps to make all necessary functions from billingClient suspendable
@@ -32,7 +34,7 @@ class BillingHelper(private val activity: Activity, billingClientBuilder: Billin
         billingClient = builder.build()
     }
 
-    private var billingContinuation: Continuation<PurchasesUpdatedBundle>? = null
+    private var billingContinuation: Continuation<PurchasesResult>? = null
     private var validation: (Purchase) -> Boolean = { true }
 
     /**
@@ -161,13 +163,15 @@ class BillingHelper(private val activity: Activity, billingClientBuilder: Billin
      */
     suspend fun queryPurchases(skuType: String): Purchase.PurchasesResult? = withContext(Dispatchers.IO) {
         Log.d("BillingHelper", "queryPurchases")
-        if (startConnectionIfNecessary()) {
-            return@withContext withContext(Dispatchers.IO) {
+        return@withContext if (startConnectionIfNecessary()) {
+            suspendCoroutine<Purchase.PurchasesResult?> { continuation ->
                 Log.d("BillingHelper", "queryPurchases on billingClient")
-                billingClient.queryPurchases(skuType)
+                billingClient.queryPurchasesAsync(skuType) { billingResult, listOfPurchase ->
+                    continuation.resume(Purchase.PurchasesResult(billingResult, listOfPurchase))
+                }
             }
         } else {
-            return@withContext null
+            null
         }
     }
 
@@ -217,7 +221,7 @@ class BillingHelper(private val activity: Activity, billingClientBuilder: Billin
                 "BillingClient.BillingResponseCode.ITEM_ALREADY_OWNED"
             }
             else -> {
-                "Unbekannter BillingResponseCode: $responseCode"
+                "Unknown BillingResponseCode: $responseCode"
             }
         }
     }
@@ -229,7 +233,7 @@ class BillingHelper(private val activity: Activity, billingClientBuilder: Billin
      * @param type String Specifies the [BillingClient.SkuType](https://developer.android.com/reference/com/android/billingclient/api/BillingClient.SkuType) of SKUs to query.
      *
      */
-    suspend fun purchase(vararg sku: String, type: String, validation: (Purchase) -> Boolean = { true }): PurchasesUpdatedBundle? {
+    suspend fun purchase(vararg sku: String, type: String, validation: (Purchase) -> Boolean = { true }): PurchasesResult? {
         val params = SkuDetailsParams.newBuilder().setSkusList(sku.toList()).setType(type).build()
         val purchasesUpdatedBundle = querySkuDetails(params, validation)
 
@@ -242,7 +246,7 @@ class BillingHelper(private val activity: Activity, billingClientBuilder: Billin
         return purchasesUpdatedBundle
     }
 
-    private suspend fun querySkuDetails(skuDetailParams: SkuDetailsParams, validation: (Purchase) -> Boolean): PurchasesUpdatedBundle? = withContext(Dispatchers.IO) {
+    private suspend fun querySkuDetails(skuDetailParams: SkuDetailsParams, validation: (Purchase) -> Boolean): PurchasesResult? = withContext(Dispatchers.IO) {
         if (startConnectionIfNecessary()) {
             val skuDetailsResult = withContext(Dispatchers.IO) {
                 billingClient.querySkuDetails(skuDetailParams)
@@ -253,7 +257,7 @@ class BillingHelper(private val activity: Activity, billingClientBuilder: Billin
             skuDetail?.let {
                 Log.d("BillingHelper", skuDetail.toString())
 
-                return@withContext suspendCoroutine<PurchasesUpdatedBundle?> { continuation ->
+                return@withContext suspendCoroutine<PurchasesResult?> { continuation ->
                     billingContinuation = continuation
                     this@BillingHelper.validation = validation
 
@@ -277,9 +281,13 @@ class BillingHelper(private val activity: Activity, billingClientBuilder: Billin
                 return
             }
         }
-        billingContinuation?.resume(PurchasesUpdatedBundle(billingResult, purchases))
+        billingContinuation?.resume(PurchasesResult(billingResult, purchases ?: emptyList()))
     }
 
-    // helper class which holds data
+    @Deprecated(
+        message = "PurchasesUpdatedBundle is not used anymore. Use PurchasesResult instead.",
+        replaceWith = ReplaceWith("PurchasesResult", "com.android.billingclient.api.PurchasesResult"),
+        level = DeprecationLevel.ERROR
+    )
     class PurchasesUpdatedBundle(val billingResult: BillingResult, val purchases: List<Purchase>?)
 }
