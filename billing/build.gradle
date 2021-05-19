@@ -6,6 +6,14 @@ plugins {
 
 apply from: '../_ktlint.gradle'
 
+ext {
+    PUBLISH_GROUP_ID = 'de.charlex.billing'
+    PUBLISH_VERSION = '4.0.0'
+    PUBLISH_ARTIFACT_ID = 'billing-suspend'
+}
+
+apply from: '../_publish.gradle'
+
 android {
     compileSdkVersion 30
     buildToolsVersion "30.0.3"

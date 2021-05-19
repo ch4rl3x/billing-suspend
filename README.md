@@ -1,29 +1,19 @@
-# BillingHelper
+# Billing-Suspend
 BillingHelper is an helper to easy use coroutines with the BillingClient.
 It also includes a client-side token validation, if there is not server available
 
 <a href="https://github.com/Ch4rl3x/BillingHelper/actions?query=workflow%3ALint"><img src="https://github.com/Ch4rl3x/BillingHelper/workflows/Lint/badge.svg" alt="Lint"></a>
 <a href="https://github.com/Ch4rl3x/BillingHelper/actions?query=workflow%3AKtlint"><img src="https://github.com/Ch4rl3x/BillingHelper/workflows/Ktlint/badge.svg" alt="Ktlint"></a>
 
-<a href="https://www.codefactor.io/repository/github/ch4rl3x/billinghelper"><img src="https://www.codefactor.io/repository/github/ch4rl3x/billinghelper/badge" alt="CodeFactor" /></a>
-[![](https://jitpack.io/v/Ch4rl3x/BillingHelper.svg)](https://jitpack.io/#Ch4rl3x/BillingHelper)
+<a href="https://www.codefactor.io/repository/github/ch4rl3x/billing-suspend"><img src="https://www.codefactor.io/repository/github/ch4rl3x/billing-suspend/badge" alt="CodeFactor" /></a>
+<a href="https://repo1.maven.org/maven2/de/charlex/billing/billing-suspend/"><img src="https://img.shields.io/maven-central/v/de.charlex.billing/billing-suspend" alt="Maven Central" /></a>
 
 ## Dependency
 
-Add this in your root `build.gradle` file (**not** your module `build.gradle` file):
-
-```gradle
-allprojects {
-	repositories {
-        maven { url "https://jitpack.io" }
-    }
-}
-```
-
-Then, add the library to your module `build.gradle`
+Add the library to your module `build.gradle`
 ```gradle
 dependencies {
-    implementation 'com.github.Ch4rl3x:BillingHelper:latest.release.here'
+    implementation 'de.charlex.billing:billing-suspend:4.0.0'
 }
 ```
 
