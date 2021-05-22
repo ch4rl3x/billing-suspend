@@ -253,7 +253,7 @@ class BillingHelper(private val activity: Activity, billingClientBuilder: Billin
             }
             Log.d("BillingHelper", "Billing Result: ${skuDetailsResult.skuDetailsList?.size}")
 
-            val skuDetail = skuDetailsResult.skuDetailsList?.get(0)
+            val skuDetail = skuDetailsResult.skuDetailsList?.getOrNull(0)
             skuDetail?.let {
                 Log.d("BillingHelper", skuDetail.toString())
 
