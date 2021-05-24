@@ -280,6 +280,22 @@ class BillingHelper(private val activity: Activity, billingClientBuilder: Billin
         }
     }
 
+    suspend fun querySkuDetailsList(skus: List<String>, type: String): List<SkuDetails>? = withContext(Dispatchers.IO) {
+        return@withContext querySkuDetailsList(
+            skuDetailParams = SkuDetailsParams.newBuilder().setSkusList(skus).setType(type).build()
+        )
+    }
+
+    suspend fun querySkuDetailsList(skuDetailParams: SkuDetailsParams): List<SkuDetails>? = withContext(Dispatchers.IO) {
+        if (startConnectionIfNecessary()) {
+            val skuDetailsResult = billingClient.querySkuDetails(skuDetailParams)
+            Log.d("BillingHelper", "Billing Result: ${skuDetailsResult.skuDetailsList?.size}")
+            return@withContext skuDetailsResult.skuDetailsList
+        } else {
+            return@withContext null
+        }
+    }
+
     override fun onPurchasesUpdated(billingResult: BillingResult, purchases: List<Purchase>?) {
         purchases?.forEach { purchase ->
             if (!validation(purchase)) {
