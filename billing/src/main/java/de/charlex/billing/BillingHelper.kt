@@ -270,7 +270,7 @@ class BillingHelper(private val activity: Activity, billingClientBuilder: Billin
     }
 
     suspend fun querySkuDetails(skuDetailParams: SkuDetailsParams): SkuDetails? = withContext(Dispatchers.IO) {
-        if(skuDetailParams.skusList.size > 1) error("This function accepts only one sku per call")
+        if (skuDetailParams.skusList.size > 1) error("This function accepts only one sku per call")
         if (startConnectionIfNecessary()) {
             val skuDetailsResult = billingClient.querySkuDetails(skuDetailParams)
             Log.d("BillingHelper", "Billing Result: ${skuDetailsResult.skuDetailsList?.size}")
