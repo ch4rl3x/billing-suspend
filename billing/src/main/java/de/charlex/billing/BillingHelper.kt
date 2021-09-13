@@ -56,7 +56,6 @@ class BillingHelper(private val activity: Activity, billingClientBuilder: Billin
             billingClient.startConnection(object : BillingClientStateListener {
                 override fun onBillingServiceDisconnected() {
                     Log.d("BillingHelper", "The billing client is disconnected.")
-                    continuation.resume(false)
                 }
 
                 override fun onBillingSetupFinished(billingResult: BillingResult) {
