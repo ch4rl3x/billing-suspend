@@ -20,6 +20,7 @@ import com.android.billingclient.api.queryPurchasesAsync
 import com.android.billingclient.api.querySkuDetails
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlin.coroutines.Continuation
 import kotlin.coroutines.resume
@@ -51,11 +52,14 @@ class BillingHelper(private val activity: Activity, billingClientBuilder: Billin
      *
      * false: The billing client is NOT ready or disconnected.
      */
-    private suspend fun startConnectionIfNecessary() = suspendCoroutine<Boolean> { continuation ->
+    private suspend fun startConnectionIfNecessary() = suspendCancellableCoroutine<Boolean> { continuation ->
         if (!billingClient.isReady) {
             billingClient.startConnection(object : BillingClientStateListener {
                 override fun onBillingServiceDisconnected() {
                     Log.d("BillingHelper", "The billing client is disconnected.")
+                    if(continuation.isActive) {
+                        continuation.resume(false)
+                    }
                 }
 
                 override fun onBillingSetupFinished(billingResult: BillingResult) {
