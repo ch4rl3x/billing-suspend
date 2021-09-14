@@ -13,7 +13,7 @@ It also includes a client-side token validation, if there is not server availabl
 Add the library to your module `build.gradle`
 ```gradle
 dependencies {
-    implementation 'de.charlex.billing:billing-suspend:4.0.0'
+    implementation 'de.charlex.billing:billing-suspend:4.0.2'
 }
 ```
 
