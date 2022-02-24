@@ -47,7 +47,7 @@ dependencies {
     /**
      * Billing
      */
-    api 'com.android.billingclient:billing:4.0.0'
+    api 'com.android.billingclient:billing:4.1.0'
     api 'com.android.billingclient:billing-ktx:4.0.0'
 
     implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8:$kotlin_version"
