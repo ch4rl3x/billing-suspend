@@ -45,7 +45,6 @@ class BillingHelper(private val activity: Activity, billingClientBuilder: Billin
     private var billingContinuation: Continuation<PurchasesResult>? = null
     private var validation: (Purchase) -> Boolean = { true }
 
-
     private fun showInAppMessages(
         inAppMessageParams: InAppMessageParams = InAppMessageParams.newBuilder()
             .addInAppMessageCategoryToShow(InAppMessageParams.InAppMessageCategoryId.TRANSACTIONAL)
