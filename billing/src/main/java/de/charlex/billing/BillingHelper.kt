@@ -9,6 +9,8 @@ import com.android.billingclient.api.BillingFlowParams
 import com.android.billingclient.api.BillingResult
 import com.android.billingclient.api.ConsumeParams
 import com.android.billingclient.api.ConsumeResult
+import com.android.billingclient.api.InAppMessageParams
+import com.android.billingclient.api.InAppMessageResult
 import com.android.billingclient.api.Purchase
 import com.android.billingclient.api.PurchasesResult
 import com.android.billingclient.api.PurchasesUpdatedListener
@@ -42,6 +44,20 @@ class BillingHelper(private val activity: Activity, billingClientBuilder: Billin
 
     private var billingContinuation: Continuation<PurchasesResult>? = null
     private var validation: (Purchase) -> Boolean = { true }
+
+
+    private fun showInAppMessages(
+        inAppMessageParams: InAppMessageParams = InAppMessageParams.newBuilder()
+            .addInAppMessageCategoryToShow(InAppMessageParams.InAppMessageCategoryId.TRANSACTIONAL)
+            .build(),
+        resultHandler: (InAppMessageResult) -> Unit
+    ) {
+        billingClient.showInAppMessages(
+            activity,
+            inAppMessageParams,
+            resultHandler
+        )
+    }
 
     /**
      * Starts up BillingClient setup process suspended if necessary.
