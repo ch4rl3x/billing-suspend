@@ -43,7 +43,6 @@ class BillingHelper(private val activity: Activity, billingClientBuilder: Billin
     }
 
     private var billingContinuation: Continuation<PurchasesResult>? = null
-    private var validation: (Purchase) -> Boolean = { true }
 
     private fun showInAppMessages(
         inAppMessageParams: InAppMessageParams = InAppMessageParams.newBuilder()
@@ -244,7 +243,7 @@ class BillingHelper(private val activity: Activity, billingClientBuilder: Billin
      * @param type String Specifies the [BillingClient.SkuType](https://developer.android.com/reference/com/android/billingclient/api/BillingClient.SkuType) of SKUs to query.
      *
      */
-    suspend fun purchase(sku: String, type: String, validation: (Purchase) -> Boolean = { true }): PurchasesResult? {
+    suspend fun purchase(sku: String, type: String, validation: suspend (Purchase) -> Boolean = { true }): PurchasesResult? {
         if (startConnectionIfNecessary()) {
             val skuDetails: SkuDetails? = querySkuDetails(sku, type)
             skuDetails?.let {
@@ -252,7 +251,6 @@ class BillingHelper(private val activity: Activity, billingClientBuilder: Billin
 
                 val purchaseResult = suspendCoroutine<PurchasesResult?> { continuation ->
                     billingContinuation = continuation
-                    this@BillingHelper.validation = validation
 
                     val billingFlowParams = BillingFlowParams
                         .newBuilder()
@@ -262,6 +260,12 @@ class BillingHelper(private val activity: Activity, billingClientBuilder: Billin
                 }
 
                 purchaseResult?.let {
+                    purchaseResult.purchasesList.forEach { purchase ->
+                        if (!validation(purchase)) {
+                            Log.e("BillingHelper", "Got a purchase: $purchase; but signature is bad.")
+                        }
+                    }
+
                     Log.d("BillingHelper", translateBillingResponseCodeToLogString(purchaseResult.billingResult.responseCode))
                 }
                 if (!purchaseResult?.billingResult?.debugMessage.isNullOrBlank()) {
@@ -315,13 +319,6 @@ class BillingHelper(private val activity: Activity, billingClientBuilder: Billin
     }
 
     override fun onPurchasesUpdated(billingResult: BillingResult, purchases: List<Purchase>?) {
-        purchases?.forEach { purchase ->
-            if (!validation(purchase)) {
-                Log.e("BillingHelper", "Got a purchase: $purchase; but signature is bad.")
-                billingContinuation?.resumeWith(Result.failure(SecurityException("No valid Signature")))
-                return
-            }
-        }
         billingContinuation?.resume(PurchasesResult(billingResult, purchases ?: emptyList()))
     }
 }
