@@ -263,6 +263,7 @@ class BillingHelper(private val activity: Activity, billingClientBuilder: Billin
                     purchaseResult.purchasesList.forEach { purchase ->
                         if (!validation(purchase)) {
                             Log.e("BillingHelper", "Got a purchase: $purchase; but signature is bad.")
+                            return null
                         }
                     }
 
