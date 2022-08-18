@@ -296,7 +296,6 @@ class BillingHelper(private val activity: Activity, billingClientBuilder: Billin
         }
     }
 
-
 //    suspend fun querySkuDetailsList(skus: List<String>, type: String): List<SkuDetails>? = withContext(Dispatchers.IO) {
 //        return@withContext querySkuDetailsList(
 //            skuDetailParams = SkuDetailsParams.newBuilder().setSkusList(skus).setType(type).build()
