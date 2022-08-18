@@ -13,14 +13,17 @@ import com.android.billingclient.api.InAppMessageParams
 import com.android.billingclient.api.InAppMessageResult
 import com.android.billingclient.api.ProductDetails
 import com.android.billingclient.api.Purchase
+import com.android.billingclient.api.PurchaseHistoryResult
 import com.android.billingclient.api.PurchasesResult
 import com.android.billingclient.api.PurchasesUpdatedListener
 import com.android.billingclient.api.QueryProductDetailsParams
 import com.android.billingclient.api.QueryProductDetailsParams.Product
+import com.android.billingclient.api.QueryPurchaseHistoryParams
 import com.android.billingclient.api.QueryPurchasesParams
 import com.android.billingclient.api.acknowledgePurchase
 import com.android.billingclient.api.consumePurchase
 import com.android.billingclient.api.queryProductDetails
+import com.android.billingclient.api.queryPurchaseHistory
 import com.android.billingclient.api.queryPurchasesAsync
 
 import kotlinx.coroutines.Dispatchers
@@ -284,6 +287,15 @@ class BillingHelper(private val activity: Activity, billingClientBuilder: Billin
             return@withContext null
         }
     }
+
+    suspend fun queryPurchaseHistory(queryPurchaseHistoryParams: QueryPurchaseHistoryParams): PurchaseHistoryResult? = withContext(Dispatchers.IO) {
+        if (billingClient.startConnectionIfNecessary()) {
+            return@withContext billingClient.queryPurchaseHistory(queryPurchaseHistoryParams)
+        } else {
+            return@withContext null
+        }
+    }
+
 
 //    suspend fun querySkuDetailsList(skus: List<String>, type: String): List<SkuDetails>? = withContext(Dispatchers.IO) {
 //        return@withContext querySkuDetailsList(

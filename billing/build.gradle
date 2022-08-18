@@ -8,7 +8,7 @@ apply from: '../_ktlint.gradle'
 
 ext {
     PUBLISH_GROUP_ID = 'de.charlex.billing'
-    PUBLISH_VERSION = '5.0.0.0-rc01'
+    PUBLISH_VERSION = '5.0.0.0-rc02'
     PUBLISH_ARTIFACT_ID = 'billing-suspend'
 }
 
