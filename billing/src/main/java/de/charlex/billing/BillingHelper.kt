@@ -1,6 +1,7 @@
 package de.charlex.billing
 
 import android.app.Activity
+import android.content.Context
 import android.util.Log
 import com.android.billingclient.api.AcknowledgePurchaseParams
 import com.android.billingclient.api.BillingClient
@@ -35,12 +36,15 @@ import kotlin.coroutines.suspendCoroutine
 /**
  * Helps to make all necessary functions from billingClient suspendable
  */
-class BillingHelper(private val activity: Activity, billingClientBuilder: BillingClient.Builder.() -> Unit) : PurchasesUpdatedListener {
+class BillingHelper(context: Context, billingClientBuilder: BillingClient.Builder.() -> Unit) : PurchasesUpdatedListener {
+
+    @Deprecated(level = DeprecationLevel.ERROR, message = "Don't use the constructor with activity as param", replaceWith = ReplaceWith("BillingHelper(context, billingClientBuilder)"))
+    constructor(activity: Activity, billingClientBuilder: BillingClient.Builder.() -> Unit) : this(activity.applicationContext, billingClientBuilder)
 
     private var billingClient: BillingClient
 
     init {
-        val builder = BillingClient.newBuilder(activity)
+        val builder = BillingClient.newBuilder(context)
         billingClientBuilder.invoke(builder)
         builder.setListener(this)
         billingClient = builder.build()
@@ -48,7 +52,18 @@ class BillingHelper(private val activity: Activity, billingClientBuilder: Billin
 
     private var billingContinuation: Continuation<PurchasesResult>? = null
 
+    @Deprecated(level = DeprecationLevel.ERROR, message = "Use showInAppMessages with activity as param", replaceWith = ReplaceWith("showInAppMessages(activity, inAppMessageParams, resultHandler)"))
     private fun showInAppMessages(
+        inAppMessageParams: InAppMessageParams = InAppMessageParams.newBuilder()
+            .addInAppMessageCategoryToShow(InAppMessageParams.InAppMessageCategoryId.TRANSACTIONAL)
+            .build(),
+        resultHandler: (InAppMessageResult) -> Unit
+    ) {
+        error("Use showInAppMessages with activity as param")
+    }
+
+    private fun showInAppMessages(
+        activity: Activity,
         inAppMessageParams: InAppMessageParams = InAppMessageParams.newBuilder()
             .addInAppMessageCategoryToShow(InAppMessageParams.InAppMessageCategoryId.TRANSACTIONAL)
             .build(),
@@ -199,6 +214,16 @@ class BillingHelper(private val activity: Activity, billingClientBuilder: Billin
         }
     }
 
+    @Deprecated(level = DeprecationLevel.ERROR, message = "Use purchase with activity as param", replaceWith = ReplaceWith("purchase(activity, productDetails, offerToken, isOfferPersonalized, validation)"))
+    suspend fun purchase(
+        productDetails: ProductDetails,
+        offerToken: String? = null,
+        isOfferPersonalized: Boolean = false,
+        validation: suspend (Purchase) -> Boolean = { true }
+    ): PurchasesResult? {
+        error("Use purchase with activity as param")
+    }
+
     /**
      * Performs a network query purchase SKUs
      *
@@ -206,7 +231,7 @@ class BillingHelper(private val activity: Activity, billingClientBuilder: Billin
      * @param type String Specifies the [BillingClient.SkuType](https://developer.android.com/reference/com/android/billingclient/api/BillingClient.SkuType) of SKUs to query.
      *
      */
-    suspend fun purchase(productDetails: ProductDetails, offerToken: String? = null, isOfferPersonalized: Boolean = false, validation: suspend (Purchase) -> Boolean = { true }): PurchasesResult? {
+    suspend fun purchase(activity: Activity, productDetails: ProductDetails, offerToken: String? = null, isOfferPersonalized: Boolean = false, validation: suspend (Purchase) -> Boolean = { true }): PurchasesResult? {
         if (billingClient.startConnectionIfNecessary()) {
 //            val skuDetails: List<ProductDetails>? = queryProductDetails(sku, type)
 //            skuDetails?.let {
