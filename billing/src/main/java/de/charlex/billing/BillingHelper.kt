@@ -172,9 +172,6 @@ class BillingHelper(context: Context, billingClientBuilder: BillingClient.Builde
      */
     private fun translateBillingResponseCodeToLogString(responseCode: Int?): String {
         return when (responseCode) {
-            BillingClient.BillingResponseCode.SERVICE_TIMEOUT -> {
-                "BillingClient.BillingResponseCode.SERVICE_TIMEOUT"
-            }
             BillingClient.BillingResponseCode.FEATURE_NOT_SUPPORTED -> {
                 "BillingClient.BillingResponseCode.FEATURE_NOT_SUPPORTED"
             }
