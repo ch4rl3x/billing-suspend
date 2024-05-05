@@ -15,6 +15,8 @@ ext {
 apply from: '../_publish.gradle'
 
 android {
+    compileSdk 33
+
     defaultConfig {
         minSdkVersion 23
         targetSdkVersion 33
