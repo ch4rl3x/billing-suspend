@@ -17,6 +17,8 @@ apply from: '../_publish.gradle'
 android {
     compileSdk 34
 
+    namespace = "de.charlex.billing"
+
     defaultConfig {
         minSdkVersion 23
         targetSdkVersion 34
