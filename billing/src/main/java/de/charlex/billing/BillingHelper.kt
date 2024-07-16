@@ -26,6 +26,7 @@ import com.android.billingclient.api.queryProductDetails
 import com.android.billingclient.api.queryPurchaseHistory
 import com.android.billingclient.api.queryPurchasesAsync
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
@@ -34,7 +35,7 @@ import kotlinx.coroutines.withContext
 class BillingHelper(
     context: Context,
     billingClientBuilder: BillingClient.Builder.() -> Unit,
-    onPurchasesResult: (purchasesResult: PurchasesResult) -> Unit
+    onPurchaseResult: (purchasesResult: PurchasesResult) -> Unit
 ) {
 
     private var billingClient: BillingClient
@@ -48,7 +49,7 @@ class BillingHelper(
             if (billingResult.debugMessage.isNotBlank()) {
                 Log.d("BillingHelper", "DebugMessage: ${billingResult.debugMessage}")
             }
-            onPurchasesResult(PurchasesResult(billingResult, purchases ?: emptyList()))
+            onPurchaseResult(PurchasesResult(billingResult, purchases ?: emptyList()))
         }
         billingClient = builder.build()
     }
@@ -85,18 +86,17 @@ class BillingHelper(
      * @return [BillingResult](https://developer.android.com/reference/com/android/billingclient/api/BillingResult) Result of the acknowledge operation
      *
      */
-    suspend fun acknowledgePurchase(purchaseToken: String): BillingResult? = withContext(Dispatchers.IO) {
+    suspend fun acknowledgePurchase(purchaseToken: String) = withContext(Dispatchers.IO) {
         val acknowledgePurchaseParams = AcknowledgePurchaseParams.newBuilder().setPurchaseToken(purchaseToken).build()
-        return@withContext if (billingClient.startConnectionIfNecessary()) {
-            val result = billingClient.acknowledgePurchase(acknowledgePurchaseParams)
-            if (result.responseCode == BillingClient.BillingResponseCode.OK) {
-                Log.d("BillingHelper", "Purchase acknowleged! (Token: $purchaseToken)")
-            } else {
-                Log.d("BillingHelper", "Purchase acknowlege: ${translateBillingResponseCodeToLogString(result.responseCode)}")
+        billingClient.onConnected {
+            launch {
+                val result = billingClient.acknowledgePurchase(acknowledgePurchaseParams)
+                if (result.responseCode == BillingClient.BillingResponseCode.OK) {
+                    Log.d("BillingHelper", "Purchase acknowleged! (Token: $purchaseToken)")
+                } else {
+                    Log.d("BillingHelper", "Purchase acknowlege: ${translateBillingResponseCodeToLogString(result.responseCode)}")
+                }
             }
-            result
-        } else {
-            null
         }
     }
 
@@ -115,12 +115,13 @@ class BillingHelper(
      *
      * @return [BillingResult](https://developer.android.com/reference/com/android/billingclient/api/BillingResult) Result of the consume operation. [ITEM_NOT_OWNED](https://developer.android.com/reference/com/android/billingclient/api/BillingClient.BillingResponseCode#ITEM_NOT_OWNED) if the user does not currently own the item.
      */
-    suspend fun consume(purchaseToken: String): ConsumeResult? = withContext(Dispatchers.IO) {
+    suspend fun consume(purchaseToken: String, onConsumeResult: (ConsumeResult) -> Unit) = withContext(Dispatchers.IO) {
         val consumeParams = ConsumeParams.newBuilder().setPurchaseToken(purchaseToken).build()
-        return@withContext if (billingClient.startConnectionIfNecessary()) {
-            billingClient.consumePurchase(consumeParams)
-        } else {
-            null
+        billingClient.onConnected {
+            launch {
+                val result = billingClient.consumePurchase(consumeParams)
+                onConsumeResult(result)
+            }
         }
     }
 
@@ -140,17 +141,18 @@ class BillingHelper(
      *
      * @return [Purchase.PurchasesResult](https://developer.android.com/reference/com/android/billingclient/api/Purchase.PurchasesResult) The Purchase.PurchasesResult containing the list of purchases and the response code ([BillingClient.BillingResponseCode](https://developer.android.com/reference/com/android/billingclient/api/BillingClient.BillingResponseCode))
      */
-    suspend fun queryPurchases(@ProductType productType: String): PurchasesResult? = withContext(Dispatchers.IO) {
+    suspend fun queryPurchases(@ProductType productType: String, handler: (PurchasesResult) -> Unit) = withContext(Dispatchers.IO) {
         Log.d("BillingHelper", "queryPurchases")
-        return@withContext if (billingClient.startConnectionIfNecessary()) {
-            Log.d("BillingHelper", "queryPurchases on billingClient")
-            billingClient.queryPurchasesAsync(
-                QueryPurchasesParams.newBuilder()
-                    .setProductType(productType)
-                    .build()
-            )
-        } else {
-            null
+        billingClient.onConnected {
+            launch {
+                val result = billingClient.queryPurchasesAsync(
+                    QueryPurchasesParams.newBuilder()
+                        .setProductType(productType)
+                        .build()
+                )
+
+                handler(result)
+            }
         }
     }
 
@@ -202,16 +204,6 @@ class BillingHelper(
         }
     }
 
-    @Deprecated(level = DeprecationLevel.ERROR, message = "Use purchase with activity as param", replaceWith = ReplaceWith("purchase(activity, productDetails, offerToken, isOfferPersonalized, validation)"))
-    suspend fun purchase(
-        productDetails: ProductDetails,
-        offerToken: String? = null,
-        isOfferPersonalized: Boolean = false,
-        validation: suspend (Purchase) -> Boolean = { true }
-    ): PurchasesResult? {
-        error("Use purchase with activity as param")
-    }
-
     /**
      * Performs a network query purchase SKUs
      *
@@ -225,9 +217,7 @@ class BillingHelper(
         offerToken: String? = null,
         isOfferPersonalized: Boolean = false
     ) {
-        if (billingClient.startConnectionIfNecessary()) {
-//            val skuDetails: List<ProductDetails>? = queryProductDetails(sku, type)
-//            skuDetails?.let {
+        billingClient.onConnected {
             Log.d("BillingHelper", "purchase ${productDetails.name}")
 
             val productDetailsParamsList = listOf(
@@ -259,8 +249,8 @@ class BillingHelper(
      * @param type String Specifies the [BillingClient.SkuType](https://developer.android.com/reference/com/android/billingclient/api/BillingClient.SkuType) of SKU to query.
      *
      */
-    suspend fun queryProductDetails(productId: String, @ProductType productType: String): List<ProductDetails>? = withContext(Dispatchers.IO) {
-        return@withContext queryProductDetails(
+    suspend fun queryProductDetails(productId: String, @ProductType productType: String, result: (List<ProductDetails>?) -> Unit) = withContext(Dispatchers.IO) {
+        queryProductDetails(
             productDetailsParams = QueryProductDetailsParams.newBuilder().setProductList(
                 listOf(
                     Product.newBuilder().setProductId(
@@ -269,26 +259,27 @@ class BillingHelper(
                         productType
                     ).build()
                 )
-            ).build()
+            ).build(),
+            result = result
         )
     }
 
-    suspend fun queryProductDetails(productDetailsParams: QueryProductDetailsParams): List<ProductDetails>? = withContext(Dispatchers.IO) {
+    suspend fun queryProductDetails(productDetailsParams: QueryProductDetailsParams, result: (List<ProductDetails>?) -> Unit) = withContext(Dispatchers.IO) {
 //        if (productDetailsParams.skusList.size > 1) error("This function accepts only one sku per call")
-        if (billingClient.startConnectionIfNecessary()) {
-            val skuDetailsResult = billingClient.queryProductDetails(productDetailsParams)
-            Log.d("BillingHelper", "Billing Result: ${skuDetailsResult.productDetailsList?.size}")
-            return@withContext skuDetailsResult.productDetailsList
-        } else {
-            return@withContext null
+        billingClient.onConnected {
+            launch {
+                val skuDetailsResult = billingClient.queryProductDetails(productDetailsParams)
+                Log.d("BillingHelper", "Billing Result: ${skuDetailsResult.productDetailsList?.size}")
+                result(skuDetailsResult.productDetailsList)
+            }
         }
     }
 
-    suspend fun queryPurchaseHistory(queryPurchaseHistoryParams: QueryPurchaseHistoryParams): PurchaseHistoryResult? = withContext(Dispatchers.IO) {
-        if (billingClient.startConnectionIfNecessary()) {
-            return@withContext billingClient.queryPurchaseHistory(queryPurchaseHistoryParams)
-        } else {
-            return@withContext null
+    suspend fun queryPurchaseHistory(queryPurchaseHistoryParams: QueryPurchaseHistoryParams, result: (PurchaseHistoryResult) -> Unit) = withContext(Dispatchers.IO) {
+        billingClient.onConnected {
+            launch {
+                result(billingClient.queryPurchaseHistory(queryPurchaseHistoryParams))
+            }
         }
     }
 
