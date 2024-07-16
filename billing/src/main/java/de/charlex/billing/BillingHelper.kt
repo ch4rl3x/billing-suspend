@@ -3,7 +3,6 @@ package de.charlex.billing
 import android.app.Activity
 import android.content.Context
 import android.util.Log
-import androidx.annotation.Nullable
 import com.android.billingclient.api.AcknowledgePurchaseParams
 import com.android.billingclient.api.BillingClient
 import com.android.billingclient.api.BillingClient.ProductType
@@ -26,9 +25,7 @@ import com.android.billingclient.api.consumePurchase
 import com.android.billingclient.api.queryProductDetails
 import com.android.billingclient.api.queryPurchaseHistory
 import com.android.billingclient.api.queryPurchasesAsync
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
@@ -149,8 +146,8 @@ class BillingHelper(
             Log.d("BillingHelper", "queryPurchases on billingClient")
             billingClient.queryPurchasesAsync(
                 QueryPurchasesParams.newBuilder()
-                .setProductType(productType)
-                .build()
+                    .setProductType(productType)
+                    .build()
             )
         } else {
             null
@@ -310,5 +307,4 @@ class BillingHelper(
 //            return@withContext null
 //        }
 //    }
-
 }
