@@ -31,16 +31,22 @@ suspend fun BillingClient.startConnectionIfNecessary() = suspendCancellableCorou
             override fun onBillingSetupFinished(billingResult: BillingResult) {
                 if (billingResult.responseCode == BillingClient.BillingResponseCode.OK) {
                     Log.d("BillingHelper", "The billing client is ready. You can query purchases.")
-                    continuation.resume(true)
+                    if (continuation.isActive) {
+                        continuation.resume(true)
+                    }
                 } else {
                     Log.d("BillingHelper", "The billing client is NOT ready. ${billingResult.debugMessage}")
-                    continuation.resume(false)
+                    if (continuation.isActive) {
+                        continuation.resume(false)
+                    }
                 }
             }
         })
     } else {
         Log.d("BillingHelper", "The billing client is still ready")
-        continuation.resume(true)
+        if (continuation.isActive) {
+            continuation.resume(true)
+        }
     }
 }
 

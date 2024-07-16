@@ -3,6 +3,7 @@ package de.charlex.billing
 import android.app.Activity
 import android.content.Context
 import android.util.Log
+import androidx.annotation.Nullable
 import com.android.billingclient.api.AcknowledgePurchaseParams
 import com.android.billingclient.api.BillingClient
 import com.android.billingclient.api.BillingClient.ProductType
@@ -16,7 +17,6 @@ import com.android.billingclient.api.ProductDetails
 import com.android.billingclient.api.Purchase
 import com.android.billingclient.api.PurchaseHistoryResult
 import com.android.billingclient.api.PurchasesResult
-import com.android.billingclient.api.PurchasesUpdatedListener
 import com.android.billingclient.api.QueryProductDetailsParams
 import com.android.billingclient.api.QueryProductDetailsParams.Product
 import com.android.billingclient.api.QueryPurchaseHistoryParams
@@ -26,40 +26,34 @@ import com.android.billingclient.api.consumePurchase
 import com.android.billingclient.api.queryProductDetails
 import com.android.billingclient.api.queryPurchaseHistory
 import com.android.billingclient.api.queryPurchasesAsync
-
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlin.coroutines.Continuation
-import kotlin.coroutines.resume
-import kotlin.coroutines.suspendCoroutine
 
 /**
  * Helps to make all necessary functions from billingClient suspendable
  */
-class BillingHelper(context: Context, billingClientBuilder: BillingClient.Builder.() -> Unit) : PurchasesUpdatedListener {
-
-    @Deprecated(level = DeprecationLevel.ERROR, message = "Don't use the constructor with activity as param", replaceWith = ReplaceWith("BillingHelper(context, billingClientBuilder)"))
-    constructor(activity: Activity, billingClientBuilder: BillingClient.Builder.() -> Unit) : this(activity.applicationContext, billingClientBuilder)
+class BillingHelper(
+    context: Context,
+    billingClientBuilder: BillingClient.Builder.() -> Unit,
+    onPurchasesResult: (purchasesResult: PurchasesResult) -> Unit
+) {
 
     private var billingClient: BillingClient
 
     init {
         val builder = BillingClient.newBuilder(context)
         billingClientBuilder.invoke(builder)
-        builder.setListener(this)
+        builder.setListener { billingResult, purchases ->
+            Log.d("BillingHelper", translateBillingResponseCodeToLogString(billingResult.responseCode))
+
+            if (billingResult.debugMessage.isNotBlank()) {
+                Log.d("BillingHelper", "DebugMessage: ${billingResult.debugMessage}")
+            }
+            onPurchasesResult(PurchasesResult(billingResult, purchases ?: emptyList()))
+        }
         billingClient = builder.build()
-    }
-
-    private var billingContinuation: Continuation<PurchasesResult>? = null
-
-    @Deprecated(level = DeprecationLevel.ERROR, message = "Use showInAppMessages with activity as param", replaceWith = ReplaceWith("showInAppMessages(activity, inAppMessageParams, resultHandler)"))
-    private fun showInAppMessages(
-        inAppMessageParams: InAppMessageParams = InAppMessageParams.newBuilder()
-            .addInAppMessageCategoryToShow(InAppMessageParams.InAppMessageCategoryId.TRANSACTIONAL)
-            .build(),
-        resultHandler: (InAppMessageResult) -> Unit
-    ) {
-        error("Use showInAppMessages with activity as param")
     }
 
     private fun showInAppMessages(
@@ -228,53 +222,36 @@ class BillingHelper(context: Context, billingClientBuilder: BillingClient.Builde
      * @param type String Specifies the [BillingClient.SkuType](https://developer.android.com/reference/com/android/billingclient/api/BillingClient.SkuType) of SKUs to query.
      *
      */
-    suspend fun purchase(activity: Activity, productDetails: ProductDetails, offerToken: String? = null, isOfferPersonalized: Boolean = false, validation: suspend (Purchase) -> Boolean = { true }): PurchasesResult? {
+    suspend fun purchase(
+        activity: Activity,
+        productDetails: ProductDetails,
+        offerToken: String? = null,
+        isOfferPersonalized: Boolean = false
+    ) {
         if (billingClient.startConnectionIfNecessary()) {
 //            val skuDetails: List<ProductDetails>? = queryProductDetails(sku, type)
 //            skuDetails?.let {
             Log.d("BillingHelper", "purchase ${productDetails.name}")
 
-            val purchaseResult = suspendCoroutine<PurchasesResult?> { continuation ->
-                billingContinuation = continuation
+            val productDetailsParamsList = listOf(
+                BillingFlowParams.ProductDetailsParams.newBuilder()
+                    // retrieve a value for "productDetails" by calling queryProductDetailsAsync()
+                    .setProductDetails(productDetails)
+                    .apply {
+                        // to get an offer token, call ProductDetails.subscriptionOfferDetails()
+                        // for a list of offers that are available to the user
+                        offerToken?.let {
+                            setOfferToken(offerToken)
+                        }
+                    }.build()
+            )
 
-                val productDetailsParamsList = listOf(
-                    BillingFlowParams.ProductDetailsParams.newBuilder()
-                        // retrieve a value for "productDetails" by calling queryProductDetailsAsync()
-                        .setProductDetails(productDetails)
-                        .apply {
-                            // to get an offer token, call ProductDetails.subscriptionOfferDetails()
-                            // for a list of offers that are available to the user
-                            offerToken?.let {
-                                setOfferToken(offerToken)
-                            }
-                        }.build()
-                )
-
-                val billingFlowParams = BillingFlowParams
-                    .newBuilder()
-                    .setProductDetailsParamsList(productDetailsParamsList)
-                    .setIsOfferPersonalized(isOfferPersonalized)
-                    .build()
-                val result = billingClient.launchBillingFlow(activity, billingFlowParams)
-                result.responseCode
-            }
-
-            purchaseResult?.let {
-                purchaseResult.purchasesList.forEach { purchase ->
-                    if (!validation(purchase)) {
-                        Log.e("BillingHelper", "Got a purchase: $purchase; but signature is bad.")
-                        return null
-                    }
-                }
-
-                Log.d("BillingHelper", translateBillingResponseCodeToLogString(purchaseResult.billingResult.responseCode))
-            }
-            if (!purchaseResult?.billingResult?.debugMessage.isNullOrBlank()) {
-                Log.d("BillingHelper", "DebugMessage: ${purchaseResult?.billingResult?.debugMessage}")
-            }
-            return purchaseResult
-        } else {
-            return null
+            val billingFlowParams = BillingFlowParams
+                .newBuilder()
+                .setProductDetailsParamsList(productDetailsParamsList)
+                .setIsOfferPersonalized(isOfferPersonalized)
+                .build()
+            billingClient.launchBillingFlow(activity, billingFlowParams)
         }
     }
 
@@ -334,7 +311,4 @@ class BillingHelper(context: Context, billingClientBuilder: BillingClient.Builde
 //        }
 //    }
 
-    override fun onPurchasesUpdated(billingResult: BillingResult, purchases: List<Purchase>?) {
-        billingContinuation?.resume(PurchasesResult(billingResult, purchases ?: emptyList()))
-    }
 }

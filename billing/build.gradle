@@ -8,18 +8,18 @@ apply from: '../_ktlint.gradle'
 
 ext {
     PUBLISH_GROUP_ID = 'de.charlex.billing'
-    PUBLISH_VERSION = '6.2.1'
+    PUBLISH_VERSION = '7.0.0'
     PUBLISH_ARTIFACT_ID = 'billing-suspend'
 }
 
 apply from: '../_publish.gradle'
 
 android {
-    compileSdk 33
+    compileSdk 34
 
     defaultConfig {
         minSdkVersion 23
-        targetSdkVersion 33
+        targetSdkVersion 34
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         testInstrumentationRunnerArguments clearPackageData: 'true'
@@ -33,12 +33,12 @@ android {
     }
 
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_1_8
-        targetCompatibility JavaVersion.VERSION_1_8
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
     }
 
     kotlinOptions {
-        jvmTarget = '1.8'
+        jvmTarget = '17'
     }
 }
 
@@ -46,8 +46,8 @@ dependencies {
     /**
      * Billing
      */
-    api 'com.android.billingclient:billing:6.2.1'
-    api 'com.android.billingclient:billing-ktx:6.2.1'
+    api 'com.android.billingclient:billing:7.0.0'
+    api 'com.android.billingclient:billing-ktx:7.0.0'
 
     implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8:$kotlin_version"
     implementation 'androidx.core:core-ktx:1.13.1'
