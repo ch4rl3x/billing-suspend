@@ -3,9 +3,14 @@ package de.charlex.billing
 import android.app.Activity
 import android.content.Context
 import android.util.Log
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import com.android.billingclient.api.AcknowledgePurchaseParams
 import com.android.billingclient.api.BillingClient
 import com.android.billingclient.api.BillingClient.ProductType
+import com.android.billingclient.api.BillingClientStateListener
 import com.android.billingclient.api.BillingFlowParams
 import com.android.billingclient.api.BillingResult
 import com.android.billingclient.api.ConsumeParams
@@ -26,31 +31,76 @@ import com.android.billingclient.api.queryProductDetails
 import com.android.billingclient.api.queryPurchaseHistory
 import com.android.billingclient.api.queryPurchasesAsync
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
-/**
- * Helps to make all necessary functions from billingClient suspendable
- */
 class BillingHelper(
     context: Context,
+    lifecycleOwner: LifecycleOwner,
     billingClientBuilder: BillingClient.Builder.() -> Unit,
     onPurchasesResult: (purchasesResult: PurchasesResult) -> Unit
-) {
+) : BillingClientStateListener {
+
+    val billingClientStatus = MutableSharedFlow<Int>(
+        replay = 1,
+        onBufferOverflow = BufferOverflow.DROP_LATEST
+    )
+
+    override fun onBillingSetupFinished(billingResult: BillingResult) {
+        billingClientStatus.tryEmit(billingResult.responseCode)
+    }
+
+    override fun onBillingServiceDisconnected() {
+        billingClientStatus.tryEmit(BillingClient.BillingResponseCode.SERVICE_DISCONNECTED)
+    }
 
     private var billingClient: BillingClient
 
     init {
-        val builder = BillingClient.newBuilder(context)
-        billingClientBuilder.invoke(builder)
-        builder.setListener { billingResult, purchases ->
-            Log.d("BillingHelper", translateBillingResponseCodeToLogString(billingResult.responseCode))
+        billingClient = BillingClient.newBuilder(context).apply {
+            billingClientBuilder.invoke(this)
+            setListener { billingResult, purchases ->
+                Log.d("BillingHelper", translateBillingResponseCodeToLogString(billingResult.responseCode))
 
-            if (billingResult.debugMessage.isNotBlank()) {
-                Log.d("BillingHelper", "DebugMessage: ${billingResult.debugMessage}")
+                if (billingResult.debugMessage.isNotBlank()) {
+                    Log.d("BillingHelper", "DebugMessage: ${billingResult.debugMessage}")
+                }
+
+                onPurchasesResult(PurchasesResult(billingResult, purchases ?: emptyList()))
             }
-            onPurchasesResult(PurchasesResult(billingResult, purchases ?: emptyList()))
+        }.build()
+
+        billingClientStatus.tryEmit(BillingClient.BillingResponseCode.SERVICE_DISCONNECTED)
+        lifecycleOwner.lifecycleScope.launch {
+            // repeatOnLifecycle launches the block in a new coroutine every time the
+            // lifecycle is in the STARTED state (or above) and cancels it when it's STOPPED.
+            lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                // Trigger the flow and start listening for values.
+                // This happens when lifecycle is STARTED and stops
+                // collecting when the lifecycle is STOPPED
+
+                billingClientStatus.collect {
+                    when (it) {
+                        BillingClient.BillingResponseCode.OK -> {}
+                        else -> billingClient.startConnection(this@BillingHelper)
+                    }
+                }
+            }
         }
-        billingClient = builder.build()
+    }
+
+    private suspend fun requireBillingClientSetup(): Boolean =
+        withTimeoutOrNull(5_000) {
+            billingClientStatus.firstOrNull() == BillingClient.BillingResponseCode.OK
+        } ?: false
+
+    suspend fun BillingClient.endConnection() = withContext(Dispatchers.Main) {
+        Log.d("BillingHelper", "The billing client is still ready")
+        endConnection()
     }
 
     private fun showInAppMessages(
@@ -87,7 +137,7 @@ class BillingHelper(
      */
     suspend fun acknowledgePurchase(purchaseToken: String): BillingResult? = withContext(Dispatchers.IO) {
         val acknowledgePurchaseParams = AcknowledgePurchaseParams.newBuilder().setPurchaseToken(purchaseToken).build()
-        return@withContext if (billingClient.startConnectionIfNecessary()) {
+        return@withContext if (requireBillingClientSetup()) {
             val result = billingClient.acknowledgePurchase(acknowledgePurchaseParams)
             if (result.responseCode == BillingClient.BillingResponseCode.OK) {
                 Log.d("BillingHelper", "Purchase acknowleged! (Token: $purchaseToken)")
@@ -117,7 +167,7 @@ class BillingHelper(
      */
     suspend fun consume(purchaseToken: String): ConsumeResult? = withContext(Dispatchers.IO) {
         val consumeParams = ConsumeParams.newBuilder().setPurchaseToken(purchaseToken).build()
-        return@withContext if (billingClient.startConnectionIfNecessary()) {
+        return@withContext if (requireBillingClientSetup()) {
             billingClient.consumePurchase(consumeParams)
         } else {
             null
@@ -136,13 +186,13 @@ class BillingHelper(
      *
      * https://developers.google.com/android-publisher/api-ref/purchases/subscriptions/get
      *
-     * @param skuType String The type of SKU, either "inapp" or "subs" as in [BillingClient.SkuType](https://developer.android.com/reference/com/android/billingclient/api/BillingClient.SkuType).
+     * @param productType String The type of the product, either "inapp" or "subs" as in [BillingClient.ProductType](https://developer.android.com/reference/com/android/billingclient/api/BillingClient.ProductType).
      *
      * @return [Purchase.PurchasesResult](https://developer.android.com/reference/com/android/billingclient/api/Purchase.PurchasesResult) The Purchase.PurchasesResult containing the list of purchases and the response code ([BillingClient.BillingResponseCode](https://developer.android.com/reference/com/android/billingclient/api/BillingClient.BillingResponseCode))
      */
     suspend fun queryPurchases(@ProductType productType: String): PurchasesResult? = withContext(Dispatchers.IO) {
         Log.d("BillingHelper", "queryPurchases")
-        return@withContext if (billingClient.startConnectionIfNecessary()) {
+        return@withContext if (requireBillingClientSetup()) {
             Log.d("BillingHelper", "queryPurchases on billingClient")
             billingClient.queryPurchasesAsync(
                 QueryPurchasesParams.newBuilder()
@@ -202,32 +252,13 @@ class BillingHelper(
         }
     }
 
-    @Deprecated(level = DeprecationLevel.ERROR, message = "Use purchase with activity as param", replaceWith = ReplaceWith("purchase(activity, productDetails, offerToken, isOfferPersonalized, validation)"))
-    suspend fun purchase(
-        productDetails: ProductDetails,
-        offerToken: String? = null,
-        isOfferPersonalized: Boolean = false,
-        validation: suspend (Purchase) -> Boolean = { true }
-    ): PurchasesResult? {
-        error("Use purchase with activity as param")
-    }
-
-    /**
-     * Performs a network query purchase SKUs
-     *
-     * @param sku String[] Specifies the SKUs to be purchased.
-     * @param type String Specifies the [BillingClient.SkuType](https://developer.android.com/reference/com/android/billingclient/api/BillingClient.SkuType) of SKUs to query.
-     *
-     */
     suspend fun purchase(
         activity: Activity,
         productDetails: ProductDetails,
         offerToken: String? = null,
         isOfferPersonalized: Boolean = false
     ) {
-        if (billingClient.startConnectionIfNecessary()) {
-//            val skuDetails: List<ProductDetails>? = queryProductDetails(sku, type)
-//            skuDetails?.let {
+        if (requireBillingClientSetup()) {
             Log.d("BillingHelper", "purchase ${productDetails.name}")
 
             val productDetailsParamsList = listOf(
@@ -255,8 +286,8 @@ class BillingHelper(
     /**
      * Get Sku Details
      *
-     * @param sku String Specifies the SKU to get details for.
-     * @param type String Specifies the [BillingClient.SkuType](https://developer.android.com/reference/com/android/billingclient/api/BillingClient.SkuType) of SKU to query.
+     * @param productId String Specifies the productId to get details for.
+     * @param type String Specifies the [BillingClient.ProductType](https://developer.android.com/reference/com/android/billingclient/api/BillingClient.ProductType) to query.
      *
      */
     suspend fun queryProductDetails(productId: String, @ProductType productType: String): List<ProductDetails>? = withContext(Dispatchers.IO) {
@@ -274,37 +305,20 @@ class BillingHelper(
     }
 
     suspend fun queryProductDetails(productDetailsParams: QueryProductDetailsParams): List<ProductDetails>? = withContext(Dispatchers.IO) {
-//        if (productDetailsParams.skusList.size > 1) error("This function accepts only one sku per call")
-        if (billingClient.startConnectionIfNecessary()) {
-            val skuDetailsResult = billingClient.queryProductDetails(productDetailsParams)
-            Log.d("BillingHelper", "Billing Result: ${skuDetailsResult.productDetailsList?.size}")
-            return@withContext skuDetailsResult.productDetailsList
+        if (requireBillingClientSetup()) {
+            val productDetailsResult = billingClient.queryProductDetails(productDetailsParams)
+            Log.d("BillingHelper", "Billing Result: ${productDetailsResult.productDetailsList?.size}")
+            return@withContext productDetailsResult.productDetailsList
         } else {
             return@withContext null
         }
     }
 
     suspend fun queryPurchaseHistory(queryPurchaseHistoryParams: QueryPurchaseHistoryParams): PurchaseHistoryResult? = withContext(Dispatchers.IO) {
-        if (billingClient.startConnectionIfNecessary()) {
+        if (requireBillingClientSetup()) {
             return@withContext billingClient.queryPurchaseHistory(queryPurchaseHistoryParams)
         } else {
             return@withContext null
         }
     }
-
-//    suspend fun querySkuDetailsList(skus: List<String>, type: String): List<SkuDetails>? = withContext(Dispatchers.IO) {
-//        return@withContext querySkuDetailsList(
-//            skuDetailParams = SkuDetailsParams.newBuilder().setSkusList(skus).setType(type).build()
-//        )
-//    }
-//
-//    suspend fun querySkuDetailsList(skuDetailParams: SkuDetailsParams): List<SkuDetails>? = withContext(Dispatchers.IO) {
-//        if (startConnectionIfNecessary()) {
-//            val skuDetailsResult = billingClient.querySkuDetails(skuDetailParams)
-//            Log.d("BillingHelper", "Billing Result: ${skuDetailsResult.skuDetailsList?.size}")
-//            return@withContext skuDetailsResult.skuDetailsList
-//        } else {
-//            return@withContext null
-//        }
-//    }
 }
