@@ -40,7 +40,6 @@ import kotlinx.coroutines.withTimeoutOrNull
 
 class BillingHelper(
     context: Context,
-    lifecycleOwner: LifecycleOwner,
     billingClientBuilder: BillingClient.Builder.() -> Unit,
     onPurchasesResult: (purchasesResult: PurchasesResult) -> Unit
 ) : BillingClientStateListener {
@@ -73,7 +72,9 @@ class BillingHelper(
                 onPurchasesResult(PurchasesResult(billingResult, purchases ?: emptyList()))
             }
         }.build()
+    }
 
+    fun initilize(lifecycleOwner: LifecycleOwner) {
         billingClientStatus.tryEmit(BillingClient.BillingResponseCode.SERVICE_DISCONNECTED)
         lifecycleOwner.lifecycleScope.launch {
             // repeatOnLifecycle launches the block in a new coroutine every time the
@@ -93,7 +94,7 @@ class BillingHelper(
         }
     }
 
-    private suspend fun requireBillingClientSetup(): Boolean =
+    private suspend fun isBillingClientConnected(): Boolean =
         withTimeoutOrNull(5_000) {
             billingClientStatus.firstOrNull() == BillingClient.BillingResponseCode.OK
         } ?: false
@@ -137,7 +138,7 @@ class BillingHelper(
      */
     suspend fun acknowledgePurchase(purchaseToken: String): BillingResult? = withContext(Dispatchers.IO) {
         val acknowledgePurchaseParams = AcknowledgePurchaseParams.newBuilder().setPurchaseToken(purchaseToken).build()
-        return@withContext if (requireBillingClientSetup()) {
+        return@withContext if (isBillingClientConnected()) {
             val result = billingClient.acknowledgePurchase(acknowledgePurchaseParams)
             if (result.responseCode == BillingClient.BillingResponseCode.OK) {
                 Log.d("BillingHelper", "Purchase acknowleged! (Token: $purchaseToken)")
@@ -167,7 +168,7 @@ class BillingHelper(
      */
     suspend fun consume(purchaseToken: String): ConsumeResult? = withContext(Dispatchers.IO) {
         val consumeParams = ConsumeParams.newBuilder().setPurchaseToken(purchaseToken).build()
-        return@withContext if (requireBillingClientSetup()) {
+        return@withContext if (isBillingClientConnected()) {
             billingClient.consumePurchase(consumeParams)
         } else {
             null
@@ -192,7 +193,7 @@ class BillingHelper(
      */
     suspend fun queryPurchases(@ProductType productType: String): PurchasesResult? = withContext(Dispatchers.IO) {
         Log.d("BillingHelper", "queryPurchases")
-        return@withContext if (requireBillingClientSetup()) {
+        return@withContext if (isBillingClientConnected()) {
             Log.d("BillingHelper", "queryPurchases on billingClient")
             billingClient.queryPurchasesAsync(
                 QueryPurchasesParams.newBuilder()
@@ -258,7 +259,7 @@ class BillingHelper(
         offerToken: String? = null,
         isOfferPersonalized: Boolean = false
     ) {
-        if (requireBillingClientSetup()) {
+        if (isBillingClientConnected()) {
             Log.d("BillingHelper", "purchase ${productDetails.name}")
 
             val productDetailsParamsList = listOf(
@@ -305,7 +306,7 @@ class BillingHelper(
     }
 
     suspend fun queryProductDetails(productDetailsParams: QueryProductDetailsParams): List<ProductDetails>? = withContext(Dispatchers.IO) {
-        if (requireBillingClientSetup()) {
+        if (isBillingClientConnected()) {
             val productDetailsResult = billingClient.queryProductDetails(productDetailsParams)
             Log.d("BillingHelper", "Billing Result: ${productDetailsResult.productDetailsList?.size}")
             return@withContext productDetailsResult.productDetailsList
@@ -315,7 +316,7 @@ class BillingHelper(
     }
 
     suspend fun queryPurchaseHistory(queryPurchaseHistoryParams: QueryPurchaseHistoryParams): PurchaseHistoryResult? = withContext(Dispatchers.IO) {
-        if (requireBillingClientSetup()) {
+        if (isBillingClientConnected()) {
             return@withContext billingClient.queryPurchaseHistory(queryPurchaseHistoryParams)
         } else {
             return@withContext null
