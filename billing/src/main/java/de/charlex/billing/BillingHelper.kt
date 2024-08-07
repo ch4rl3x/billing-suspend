@@ -33,6 +33,7 @@ import com.android.billingclient.api.queryPurchasesAsync
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -96,7 +97,8 @@ class BillingHelper(
 
     private suspend fun isBillingClientConnected(): Boolean =
         withTimeoutOrNull(5_000) {
-            billingClientStatus.firstOrNull() == BillingClient.BillingResponseCode.OK
+            billingClientStatus.first { it == BillingClient.BillingResponseCode.OK }
+            true
         } ?: false
 
     suspend fun BillingClient.endConnection() = withContext(Dispatchers.Main) {
