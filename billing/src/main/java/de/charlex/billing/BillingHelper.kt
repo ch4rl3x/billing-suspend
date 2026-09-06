@@ -19,24 +19,23 @@ import com.android.billingclient.api.InAppMessageParams
 import com.android.billingclient.api.InAppMessageResult
 import com.android.billingclient.api.ProductDetails
 import com.android.billingclient.api.Purchase
-import com.android.billingclient.api.PurchaseHistoryResult
 import com.android.billingclient.api.PurchasesResult
 import com.android.billingclient.api.QueryProductDetailsParams
 import com.android.billingclient.api.QueryProductDetailsParams.Product
-import com.android.billingclient.api.QueryPurchaseHistoryParams
 import com.android.billingclient.api.QueryPurchasesParams
 import com.android.billingclient.api.acknowledgePurchase
 import com.android.billingclient.api.consumePurchase
 import com.android.billingclient.api.queryProductDetails
-import com.android.billingclient.api.queryPurchaseHistory
 import com.android.billingclient.api.queryPurchasesAsync
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.channels.BufferOverflow
-import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.time.Duration.Companion.milliseconds
 
 class BillingHelper(
     context: Context,
@@ -44,23 +43,31 @@ class BillingHelper(
     onPurchasesResult: (purchasesResult: PurchasesResult) -> Unit
 ) : BillingClientStateListener {
 
-    val billingClientStatus = MutableSharedFlow<Int>(
-        replay = 1,
-        onBufferOverflow = BufferOverflow.DROP_LATEST
-    )
+    private val _billingClientStatus = MutableStateFlow(BillingClient.BillingResponseCode.SERVICE_DISCONNECTED)
+
+    /**
+     * The latest [BillingClient.BillingResponseCode] reported by the billing service.
+     *
+     * Starts out as [BillingClient.BillingResponseCode.SERVICE_DISCONNECTED] and turns into
+     * [BillingClient.BillingResponseCode.OK] once the connection is established.
+     */
+    val billingClientStatus: StateFlow<Int> = _billingClientStatus.asStateFlow()
 
     override fun onBillingSetupFinished(billingResult: BillingResult) {
-        billingClientStatus.tryEmit(billingResult.responseCode)
+        _billingClientStatus.value = billingResult.responseCode
     }
 
     override fun onBillingServiceDisconnected() {
-        billingClientStatus.tryEmit(BillingClient.BillingResponseCode.SERVICE_DISCONNECTED)
+        _billingClientStatus.value = BillingClient.BillingResponseCode.SERVICE_DISCONNECTED
     }
 
     private var billingClient: BillingClient
 
     init {
         billingClient = BillingClient.newBuilder(context).apply {
+            // Since Play Billing Library 8 the client re-establishes a dropped
+            // connection on its own, so only the initial connect is our job.
+            enableAutoServiceReconnection()
             billingClientBuilder.invoke(this)
             setListener { billingResult, purchases ->
                 Log.d("BillingHelper", translateBillingResponseCodeToLogString(billingResult.responseCode))
@@ -74,8 +81,21 @@ class BillingHelper(
         }.build()
     }
 
-    fun initilize(lifecycleOwner: LifecycleOwner) {
-        billingClientStatus.tryEmit(BillingClient.BillingResponseCode.SERVICE_DISCONNECTED)
+    @Deprecated(
+        message = "Renamed to initialize",
+        replaceWith = ReplaceWith("initialize(lifecycleOwner)")
+    )
+    fun initilize(lifecycleOwner: LifecycleOwner) = initialize(lifecycleOwner)
+
+    /**
+     * Connects the [BillingClient] and keeps it connected while [lifecycleOwner] is at least
+     * [Lifecycle.State.STARTED].
+     *
+     * Re-connecting after a dropped connection is handled by the billing library itself since
+     * Play Billing Library 8, so this only has to establish the initial connection.
+     */
+    fun initialize(lifecycleOwner: LifecycleOwner) {
+        _billingClientStatus.value = BillingClient.BillingResponseCode.SERVICE_DISCONNECTED
         lifecycleOwner.lifecycleScope.launch {
             // repeatOnLifecycle launches the block in a new coroutine every time the
             // lifecycle is in the STARTED state (or above) and cancels it when it's STOPPED.
@@ -87,7 +107,9 @@ class BillingHelper(
                 billingClientStatus.collect {
                     when (it) {
                         BillingClient.BillingResponseCode.OK -> {}
-                        else -> billingClient.startConnection(this@BillingHelper)
+                        else -> if (billingClient.connectionState == BillingClient.ConnectionState.DISCONNECTED) {
+                            billingClient.startConnection(this@BillingHelper)
+                        }
                     }
                 }
             }
@@ -95,28 +117,44 @@ class BillingHelper(
     }
 
     private suspend fun isBillingClientConnected(): Boolean =
-        withTimeoutOrNull(5_000) {
+        withTimeoutOrNull(5_000.milliseconds) {
             billingClientStatus.first { it == BillingClient.BillingResponseCode.OK }
             true
         } ?: false
 
-    suspend fun BillingClient.endConnection() = withContext(Dispatchers.Main) {
-        Log.d("BillingHelper", "The billing client is still ready")
-        endConnection()
+    /**
+     * Closes the connection to the billing service and releases its resources.
+     *
+     * The [BillingClient] cannot be reused afterwards, so a new [BillingHelper] is needed to
+     * make further calls.
+     */
+    suspend fun endConnection() = withContext(Dispatchers.Main) {
+        Log.d("BillingHelper", "Ending the billing client connection")
+        billingClient.endConnection()
     }
 
-    private fun showInAppMessages(
+    /**
+     * Shows any in-app messages Google Play has queued for the current user, e.g. to recover a
+     * subscription whose payment method was declined.
+     *
+     * @return [BillingResult](https://developer.android.com/reference/com/android/billingclient/api/BillingResult) Result of the request, or `null` if the billing client is not connected.
+     */
+    suspend fun showInAppMessages(
         activity: Activity,
         inAppMessageParams: InAppMessageParams = InAppMessageParams.newBuilder()
             .addInAppMessageCategoryToShow(InAppMessageParams.InAppMessageCategoryId.TRANSACTIONAL)
             .build(),
         resultHandler: (InAppMessageResult) -> Unit
-    ) {
-        billingClient.showInAppMessages(
-            activity,
-            inAppMessageParams,
-            resultHandler
-        )
+    ): BillingResult? = withContext(Dispatchers.Main) {
+        return@withContext if (isBillingClientConnected()) {
+            billingClient.showInAppMessages(
+                activity,
+                inAppMessageParams,
+                resultHandler
+            )
+        } else {
+            null
+        }
     }
 
     /**
@@ -254,13 +292,24 @@ class BillingHelper(
         }
     }
 
+    /**
+     * Launches the Google Play billing flow for [productDetails].
+     *
+     * The result of the purchase itself is not returned here, it is delivered to the
+     * `onPurchasesResult` callback passed to the [BillingHelper] constructor.
+     *
+     * @param offerToken String? To get an offer token, call [ProductDetails.subscriptionOfferDetails]
+     * for a list of offers that are available to the user.
+     *
+     * @return [BillingResult](https://developer.android.com/reference/com/android/billingclient/api/BillingResult) Result of launching the flow, or `null` if the billing client is not connected.
+     */
     suspend fun purchase(
         activity: Activity,
         productDetails: ProductDetails,
         offerToken: String? = null,
         isOfferPersonalized: Boolean = false
-    ) {
-        if (isBillingClientConnected()) {
+    ): BillingResult? = withContext(Dispatchers.Main) {
+        return@withContext if (isBillingClientConnected()) {
             Log.d("BillingHelper", "purchase ${productDetails.name}")
 
             val productDetailsParamsList = listOf(
@@ -268,8 +317,6 @@ class BillingHelper(
                     // retrieve a value for "productDetails" by calling queryProductDetailsAsync()
                     .setProductDetails(productDetails)
                     .apply {
-                        // to get an offer token, call ProductDetails.subscriptionOfferDetails()
-                        // for a list of offers that are available to the user
                         offerToken?.let {
                             setOfferToken(offerToken)
                         }
@@ -281,7 +328,10 @@ class BillingHelper(
                 .setProductDetailsParamsList(productDetailsParamsList)
                 .setIsOfferPersonalized(isOfferPersonalized)
                 .build()
+            // launchBillingFlow has to be called from the main thread
             billingClient.launchBillingFlow(activity, billingFlowParams)
+        } else {
+            null
         }
     }
 
@@ -311,14 +361,6 @@ class BillingHelper(
             val productDetailsResult = billingClient.queryProductDetails(productDetailsParams)
             Log.d("BillingHelper", "Billing Result: ${productDetailsResult.productDetailsList?.size}")
             return@withContext productDetailsResult.productDetailsList
-        } else {
-            return@withContext null
-        }
-    }
-
-    suspend fun queryPurchaseHistory(queryPurchaseHistoryParams: QueryPurchaseHistoryParams): PurchaseHistoryResult? = withContext(Dispatchers.IO) {
-        if (isBillingClientConnected()) {
-            return@withContext billingClient.queryPurchaseHistory(queryPurchaseHistoryParams)
         } else {
             return@withContext null
         }

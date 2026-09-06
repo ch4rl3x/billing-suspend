@@ -1,0 +1,21 @@
+# Project-specific versions only. The build toolchain -- compileSdk, minSdk, jdk,
+# AGP, Dokka -- comes from the shared catalog, imported as `conventions` in
+# settings.gradle.kts.
+
+[versions]
+
+billing = "9.1.0"
+
+coreKtx = "1.19.0"
+androidxLifecycle = "2.11.0"
+kotlinxCoroutines = "1.11.0"
+
+[libraries]
+
+android-billingclient-billing = { group = "com.android.billingclient", name = "billing", version.ref = "billing" }
+android-billingclient-billing_ktx = { group = "com.android.billingclient", name = "billing-ktx", version.ref = "billing" }
+
+androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "coreKtx" }
+androidx-lifecycle-runtime-ktx = { module = "androidx.lifecycle:lifecycle-runtime-ktx", version.ref = "androidxLifecycle" }
+
+kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinxCoroutines" }
